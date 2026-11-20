@@ -221,7 +221,7 @@ export function parseVideogenArgs(raw: string): VideogenArgs {
 	return out;
 }
 
-function formatPickerOptions(models: readonly VeniceVideoModel[]): string[] {
+export function formatPickerOptions(models: readonly VeniceVideoModel[]): string[] {
 	const sorted = [...models].sort((a, b) => {
 		if (a.id === DEFAULT_VIDEO_MODEL) return -1;
 		if (b.id === DEFAULT_VIDEO_MODEL) return 1;
@@ -230,24 +230,28 @@ function formatPickerOptions(models: readonly VeniceVideoModel[]): string[] {
 		if (aUnc !== bUnc) return aUnc - bUnc;
 		return a.id.localeCompare(b.id);
 	});
-	return sorted.map((m) => {
-		const name = m.model_spec?.name || m.id;
-		const res = m.model_spec?.constraints?.resolutions?.join("/") || "auto";
-		const durs = m.model_spec?.constraints?.durations;
-		const durSpan = durs && durs.length > 0 ? `${durs[0]}–${durs[durs.length - 1]}` : "var";
-		const flags = [
-			m.id === DEFAULT_VIDEO_MODEL ? "default" : null,
-			m.model_spec?.uncensored ? "uncensored" : null,
-			res,
-			durSpan,
-		]
-			.filter(Boolean)
-			.join(" · ");
-		return `${name} (${m.id}) — ${flags}`;
-	});
+	return [
+		"── Venice (API, paid) ──",
+		...sorted.map((m) => {
+			const rawName = (m.model_spec?.name || m.id).replace(/\s+\u2014\s+/g, " - ");
+			const res = m.model_spec?.constraints?.resolutions?.join("/") || "auto";
+			const durs = m.model_spec?.constraints?.durations;
+			const durSpan = durs && durs.length > 0 ? `${durs[0]}–${durs[durs.length - 1]}` : "var";
+			const flags = [
+				m.id === DEFAULT_VIDEO_MODEL ? "default" : null,
+				m.model_spec?.uncensored ? "uncensored" : null,
+				res,
+				durSpan,
+			]
+				.filter(Boolean)
+				.join(" · ");
+			return `${rawName} (${m.id}) — ${flags} — Venice`;
+		}),
+	];
 }
 
-function modelIdFromOption(option: string): string | undefined {
+export function modelIdFromOption(option: string): string | undefined {
+	if (option.startsWith("──")) return undefined;
 	const label = option.split(" — ", 1)[0];
 	const match = label.match(/\(([^()]*)\)\s*$/);
 	return match?.[1]?.trim() || undefined;
@@ -592,12 +596,12 @@ export default function (pi: ExtensionAPI): void {
 			}
 			const current = readVideoModelOverride() || resolveVideoModel();
 			const options = formatPickerOptions(models);
-			const picked = await ctx.ui.select(`Video model (current: ${current})`, options);
-			if (!picked) return;
+			const picked = await ctx.ui.select(`Venice video model (current: ${current})`, options);
+			if (!picked || picked.startsWith("──")) return;
 			const id = modelIdFromOption(picked);
 			if (!id) return;
 			persistVideoModelOverride(id);
-			ctx.ui.notify(`video model set to ${id}`, "info");
+			ctx.ui.notify(`video model set to ${id} (Venice)`, "info");
 		},
 	});
 

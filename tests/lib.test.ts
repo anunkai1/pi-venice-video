@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { parseVideogenArgs } from "../extensions/index.js";
+import { formatPickerOptions, modelIdFromOption, parseVideogenArgs } from "../extensions/index.js";
 import {
 	CostCapExceededError,
 	DEFAULT_VIDEO_MODEL,
@@ -688,5 +688,21 @@ describe("overrides, job recovery, catalog cache, parseVideogenArgs", () => {
 			yes: true,
 			prompt: "a cat surfing",
 		});
+	});
+
+	it("formats picker options with Venice divider + compact Venice tag and parses IDs cleanly", () => {
+		const options = formatPickerOptions(FIXTURE_MODELS);
+		expect(options[0]).toBe("── Venice (API, paid) ──");
+		expect(modelIdFromOption(options[0])).toBeUndefined();
+		expect(options[1]).toBe(
+			"MiniMax H3 Chili (minimax-h3-chili-text-to-video) — default · uncensored · 768P · 4s–15s — Venice",
+		);
+		expect(modelIdFromOption(options[1])).toBe("minimax-h3-chili-text-to-video");
+		for (const opt of options.slice(1)) {
+			expect(opt.endsWith(" — Venice")).toBe(true);
+			const parsed = modelIdFromOption(opt);
+			expect(parsed).toBeTruthy();
+			expect(FIXTURE_MODELS.some((m) => m.id === parsed)).toBe(true);
+		}
 	});
 });
