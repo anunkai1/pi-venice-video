@@ -32,6 +32,7 @@ import {
 	saveVideoJob,
 	validateAndBuildBodies,
 	type PersistedVideo,
+	type QueueVideoResult,
 	type VeniceVideoModel,
 } from "./lib.js";
 
@@ -173,6 +174,16 @@ function formatCompletedLines(opts: {
 	return lines.join("\n");
 }
 
+/** Failure text for a job that was queued (and possibly billed) before the
+ *  error, so the paid media can still be collected instead of stranded. */
+function queueRecoveryHint(queueId: string | undefined): string {
+	if (!queueId) return "";
+	return (
+		`\n\nVenice job \`${queueId}\` was queued before this failure and may still be processing. ` +
+		`Collect it with \`venice_video_result(queue_id: "${queueId}")\`.`
+	);
+}
+
 // ── /videogen argument parser ──────────────────────────────────────
 
 interface VideogenArgs {
@@ -292,6 +303,7 @@ export default function (pi: ExtensionAPI): void {
 				};
 			}
 
+			let queuedJob: QueueVideoResult | undefined;
 			try {
 				const maxCostUsd = resolveMaxCostUsd(params.max_cost, false);
 				const baseModelId = resolveVideoModel(params.model);
@@ -348,6 +360,7 @@ export default function (pi: ExtensionAPI): void {
 				});
 
 				const queued = await queueVideo(apiKey, built.queueBody, { signal });
+				queuedJob = queued;
 				saveVideoJob({
 					queue_id: queued.queue_id,
 					model: queued.model,
@@ -456,10 +469,16 @@ export default function (pi: ExtensionAPI): void {
 				const msg = err instanceof Error ? err.message : String(err);
 				return {
 					isError: true,
-					content: [{ type: "text", text: `Error generating video: ${msg}` }],
+					content: [
+						{
+							type: "text",
+							text: `Error generating video: ${msg}${queueRecoveryHint(queuedJob?.queue_id)}`,
+						},
+					],
 					details: {
 						error: msg,
 						over_cap: err instanceof CostCapExceededError,
+						...(queuedJob ? { queue_id: queuedJob.queue_id, model: queuedJob.model } : {}),
 					},
 				};
 			}
@@ -630,6 +649,7 @@ export default function (pi: ExtensionAPI): void {
 			}
 
 			const displayedPrompt = escapeMarkdownText(parsed.prompt);
+			let queuedJob: QueueVideoResult | undefined;
 			try {
 				const maxCostUsd = resolveMaxCostUsd(parsed.max_cost, parsed.yes);
 				const baseModelId = resolveVideoModel(parsed.model);
@@ -665,6 +685,7 @@ export default function (pi: ExtensionAPI): void {
 				);
 
 				const queued = await queueVideo(apiKey, built.queueBody);
+				queuedJob = queued;
 				saveVideoJob({
 					queue_id: queued.queue_id,
 					model: queued.model,
@@ -774,12 +795,22 @@ export default function (pi: ExtensionAPI): void {
 				ctx.ui.notify(`videogen: saved ${persisted.videoPath}`, "info");
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : String(err);
-				ctx.ui.notify(`videogen failed: ${msg}`, "error");
+				ctx.ui.notify(
+					`videogen failed: ${msg}${queuedJob ? ` (queue_id=${queuedJob.queue_id})` : ""}`,
+					"error",
+				);
 				pi.sendMessage({
 					customType: "note",
-					content: `**🎬 /videogen** — failed: ${msg}\n\n**Prompt:** ${displayedPrompt}`,
+					content:
+						`**🎬 /videogen** — failed: ${msg}${queueRecoveryHint(queuedJob?.queue_id)}\n\n` +
+						`**Prompt:** ${displayedPrompt}`,
 					display: true,
-					details: { source: "videogen", prompt: parsed.prompt, error: msg },
+					details: {
+						source: "videogen",
+						prompt: parsed.prompt,
+						error: msg,
+						...(queuedJob ? { queue_id: queuedJob.queue_id, model: queuedJob.model } : {}),
+					},
 				});
 			}
 		},
