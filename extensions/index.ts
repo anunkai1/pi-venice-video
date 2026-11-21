@@ -179,8 +179,8 @@ function formatCompletedLines(opts: {
 function queueRecoveryHint(queueId: string | undefined): string {
 	if (!queueId) return "";
 	return (
-		`\n\nVenice job \`${queueId}\` was queued before this failure and may still be processing. ` +
-		`Collect it with \`venice_video_result(queue_id: "${queueId}")\`.`
+		`\n\nVenice job \`${queueId}\` was queued before this failure; its media can still be collected ` +
+		`with \`venice_video_result(queue_id: "${queueId}")\`.`
 	);
 }
 
