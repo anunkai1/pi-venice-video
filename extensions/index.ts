@@ -274,6 +274,7 @@ export default function (pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "venice_generate_video",
 		label: "Venice: Generate Video",
+		exposure: "deferred",
 		description:
 			"Generate a short video clip via Venice API (quotes price and enforces max_cost cap before queueing, polls async job, validates MP4/WebM/MOV container, saves to /uploads/<uuid>.mp4 with an ffmpeg poster frame). Supports text-to-video, image-to-video, and reference-to-video variants automatically.",
 		promptSnippet:
@@ -488,6 +489,7 @@ export default function (pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "venice_video_result",
 		label: "Venice: Collect Video Result",
+		exposure: "deferred",
 		description:
 			"Collect a previously queued Venice video job by queue_id (used after a timeout or pi restart).",
 		parameters: VideoResultParams,
