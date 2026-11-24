@@ -310,7 +310,7 @@ export function resolveVariantModel(
 				/-(text|image|reference)-to-video(?=$|-)/,
 				"-first-last-frame-to-video",
 			);
-			if (flf !== baseModelId && byId.has(flf) && !inputs.hasImage) {
+			if (flf !== baseModelId && byId.has(flf)) {
 				return byId.get(flf)!;
 			}
 		}

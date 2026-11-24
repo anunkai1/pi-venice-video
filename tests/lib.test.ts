@@ -176,6 +176,39 @@ const FIXTURE_MODELS: VeniceVideoModel[] = [
 		},
 	},
 	{
+		id: "kling-o3-pro-text-to-video",
+		model_spec: {
+			constraints: {
+				model_type: "text-to-video",
+				aspect_ratios: ["16:9"],
+				resolutions: ["1080p", "720p"],
+				durations: ["5s", "10s"],
+			},
+		},
+	},
+	{
+		id: "kling-o3-pro-image-to-video",
+		model_spec: {
+			constraints: {
+				model_type: "image-to-video",
+				aspect_ratios: ["16:9"],
+				resolutions: ["1080p", "720p"],
+				durations: ["5s", "10s"],
+			},
+		},
+	},
+	{
+		id: "kling-o3-pro-first-last-frame-to-video",
+		model_spec: {
+			constraints: {
+				model_type: "image-to-video",
+				aspect_ratios: ["16:9"],
+				resolutions: ["1080p", "720p"],
+				durations: ["5s", "10s"],
+			},
+		},
+	},
+	{
 		id: "ovi-image-to-video",
 		model_spec: {
 			constraints: {
@@ -259,6 +292,50 @@ describe("resolveVariantModel", () => {
 				FIXTURE_MODELS,
 			).id,
 		).toBe("flux-3-first-last-frame-to-video");
+	});
+
+	it("routes image + end_image to -first-last-frame-to-video across flux-3 and kling-o3-pro families", () => {
+		expect(
+			resolveVariantModel(
+				"flux-3-text-to-video",
+				{ hasImage: true, hasEndImage: true, hasReferenceImages: false },
+				FIXTURE_MODELS,
+			).id,
+		).toBe("flux-3-first-last-frame-to-video");
+
+		expect(
+			resolveVariantModel(
+				"kling-o3-pro-text-to-video",
+				{ hasImage: true, hasEndImage: true, hasReferenceImages: false },
+				FIXTURE_MODELS,
+			).id,
+		).toBe("kling-o3-pro-first-last-frame-to-video");
+
+		expect(
+			resolveVariantModel(
+				"kling-o3-pro-image-to-video",
+				{ hasImage: true, hasEndImage: true, hasReferenceImages: false },
+				FIXTURE_MODELS,
+			).id,
+		).toBe("kling-o3-pro-first-last-frame-to-video");
+
+		// Start image alone still routes to -image-to-video when both siblings exist
+		expect(
+			resolveVariantModel(
+				"kling-o3-pro-text-to-video",
+				{ hasImage: true, hasEndImage: false, hasReferenceImages: false },
+				FIXTURE_MODELS,
+			).id,
+		).toBe("kling-o3-pro-image-to-video");
+
+		// Models without a first-last-frame sibling still fall back to -image-to-video
+		expect(
+			resolveVariantModel(
+				"minimax-h3-chili-text-to-video",
+				{ hasImage: true, hasEndImage: true, hasReferenceImages: false },
+				FIXTURE_MODELS,
+			).id,
+		).toBe("minimax-h3-chili-image-to-video");
 	});
 
 	it("errors clearly for unknown models or image-only models without an image", () => {
