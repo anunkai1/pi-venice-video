@@ -641,6 +641,58 @@ describe("pollVideoJob", () => {
 		expect(outcome.status).toBe("timeout");
 		expect(outcome.queueId).toBe("q-timeout");
 	});
+
+	it("fails fast with queue_id context on terminal JSON failure statuses (FAILED/ERROR/CANCELLED)", async () => {
+		for (const [status, extra, expectedDetail] of [
+			["FAILED", { error: "provider job failed" }, "provider job failed"],
+			["ERROR", { error: { message: "render crashed" } }, "render crashed"],
+			["CANCELLED", { message: "cancelled upstream" }, "cancelled upstream"],
+		] as const) {
+			const mockFetch = vi.fn(
+				async () =>
+					new Response(JSON.stringify({ status, ...extra }), {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					}),
+			) as unknown as typeof fetch;
+
+			await expect(
+				pollVideoJob({
+					apiKey: "k",
+					queueId: `q-${status.toLowerCase()}`,
+					pollIntervalMs: 5,
+					deadlineMs: 2000,
+					fetchImpl: mockFetch,
+				}),
+			).rejects.toThrow(new RegExp(`q-${status.toLowerCase()}.*${status}.*${expectedDetail}`));
+			expect(mockFetch).toHaveBeenCalledTimes(1);
+		}
+	});
+
+	it("uses a 120s timeout on /video/retrieve so inline binary downloads match download_url", async () => {
+		const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
+		try {
+			const mockFetch = vi.fn(
+				async () =>
+					new Response(new Uint8Array(makeMp4Bytes("inline")), {
+						status: 200,
+						headers: { "Content-Type": "video/mp4" },
+					}),
+			) as unknown as typeof fetch;
+
+			const outcome = await pollVideoJob({
+				apiKey: "k",
+				queueId: "q-inline-timeout",
+				pollIntervalMs: 5,
+				deadlineMs: 2000,
+				fetchImpl: mockFetch,
+			});
+			expect(outcome.status).toBe("completed");
+			expect(timeoutSpy).toHaveBeenCalledWith(120_000);
+		} finally {
+			timeoutSpy.mockRestore();
+		}
+	});
 });
 
 // ── Magic bytes & upload persistence ───────────────────────────────

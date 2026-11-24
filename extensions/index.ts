@@ -626,9 +626,11 @@ export default function (pi: ExtensionAPI): void {
 		},
 	});
 
+	const videogenUsage =
+		'/videogen [-m MODEL] [-d 5s] [-a 16:9] [-r 768P] [-i /uploads/x.png] [-e /uploads/end.png] [-c MAX_USD] [-y] "prompt"';
+
 	pi.registerCommand("videogen", {
-		description:
-			"Generate a video directly via Venice (no LLM). Usage: /videogen [-m MODEL] [-d 5s] [-a 16:9] [-r 768P] [-i /uploads/x.png] [-c MAX_USD] [-y] \"prompt\"",
+		description: `Generate a video directly via Venice (no LLM). Usage: ${videogenUsage}`,
 		handler: async (args, ctx) => {
 			const apiKey = getVeniceKey();
 			if (!apiKey) {
@@ -643,10 +645,7 @@ export default function (pi: ExtensionAPI): void {
 				return;
 			}
 			if (!parsed.prompt) {
-				ctx.ui.notify(
-					'usage: /videogen [-m MODEL] [-d 5s] [-a 16:9] [-r 768P] [-i /uploads/x.png] [-c MAX_USD] [-y] "prompt"',
-					"warning",
-				);
+				ctx.ui.notify(`usage: ${videogenUsage}`, "warning");
 				return;
 			}
 

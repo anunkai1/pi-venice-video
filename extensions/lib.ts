@@ -56,6 +56,7 @@ export const DEFAULT_MAX_VIDEO_BYTES = 200 * 1024 * 1024;
 export const DEFAULT_POLL_INTERVAL_MS = 5_000;
 export const DEFAULT_POLL_DEADLINE_MS = 10 * 60_000;
 export const DEFAULT_HTTP_TIMEOUT_MS = 60_000;
+export const DEFAULT_DOWNLOAD_TIMEOUT_MS = 120_000;
 export const DEFAULT_MODEL_CACHE_TTL_MS = 5 * 60_000;
 export const MAX_TRANSIENT_POLL_ERRORS = 5;
 
@@ -756,6 +757,15 @@ export interface PollVideoOptions {
 	onProgress?: (progress: PollProgress) => void;
 }
 
+const TERMINAL_FAILURE_STATUSES = new Set([
+	"FAILED",
+	"ERROR",
+	"CANCELLED",
+	"CANCELED",
+	"REJECTED",
+	"EXPIRED",
+]);
+
 export async function pollVideoJob(opts: PollVideoOptions): Promise<PollOutcome> {
 	const f = opts.fetchImpl ?? fetch;
 	const intervalMs = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
@@ -788,7 +798,9 @@ export async function pollVideoJob(opts: PollVideoOptions): Promise<PollOutcome>
 					queue_id: opts.queueId,
 					delete_media_on_completion: false,
 				}),
-				signal: withTimeout(opts.signal, DEFAULT_HTTP_TIMEOUT_MS),
+				// /video/retrieve can stream the raw binary clip inline, so keep the
+				// same download timeout budget as download_url fetches.
+				signal: withTimeout(opts.signal, DEFAULT_DOWNLOAD_TIMEOUT_MS),
 			});
 		} catch (err) {
 			if (opts.signal?.aborted) {
@@ -817,11 +829,15 @@ export async function pollVideoJob(opts: PollVideoOptions): Promise<PollOutcome>
 				const parsed = tryParseJson(text) as
 					| {
 							status?: string;
+							error?: unknown;
+							message?: unknown;
 							average_execution_time?: number;
 							execution_duration?: number;
 					  }
 					| undefined;
-				if (parsed?.status === "COMPLETED") {
+				const status =
+					typeof parsed?.status === "string" ? parsed.status.trim().toUpperCase() : undefined;
+				if (status === "COMPLETED") {
 					if (!opts.downloadUrl) {
 						throw new Error(
 							`Job ${opts.queueId} completed with status=COMPLETED, but no download_url is available.`,
@@ -834,6 +850,23 @@ export async function pollVideoJob(opts: PollVideoOptions): Promise<PollOutcome>
 						queueId: opts.queueId,
 						elapsedMs: Date.now() - started,
 					};
+				}
+				if (status && TERMINAL_FAILURE_STATUSES.has(status)) {
+					const errObj =
+						parsed?.error && typeof parsed.error === "object"
+							? (parsed.error as Record<string, unknown>)
+							: undefined;
+					const detail =
+						typeof parsed?.error === "string"
+							? parsed.error
+							: typeof errObj?.message === "string"
+								? errObj.message
+								: typeof parsed?.message === "string"
+									? parsed.message
+									: undefined;
+					throw new Error(
+						`Venice video job ${opts.queueId} ended with status=${status}${detail ? `: ${detail}` : ""}`,
+					);
 				}
 				opts.onProgress?.({
 					queueId: opts.queueId,
@@ -895,7 +928,7 @@ async function fetchWithRetries(
 		try {
 			const res = await f(url, {
 				method: "GET",
-				signal: withTimeout(signal, 120_000),
+				signal: withTimeout(signal, DEFAULT_DOWNLOAD_TIMEOUT_MS),
 			});
 			if (res.ok) return res;
 			lastError = new Error(`Download from Venice download_url failed (${res.status})`);

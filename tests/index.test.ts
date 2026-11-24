@@ -203,4 +203,14 @@ describe("venice_generate_video failure results carry the queue_id", () => {
 		expect(failure.content).toContain("q-command-789");
 		expect(failure.details.queue_id).toBe("q-command-789");
 	});
+
+	it("/videogen description and empty-arg usage both document -e end-image", async () => {
+		const { commands, notify } = loadExtension();
+		const videogen = commands.get("videogen")!;
+		expect(videogen.description).toContain("[-e /uploads/end.png]");
+
+		const ctx = { ui: { notify, select: vi.fn() } };
+		await videogen.handler("", ctx);
+		expect(notify).toHaveBeenCalledWith(expect.stringContaining("[-e /uploads/end.png]"), "warning");
+	});
 });
